@@ -1,0 +1,41 @@
+# ===== F1TENTH RL Training Framework =====
+
+# Core
+numpy>=1.24.0
+scipy>=1.10.0
+PyYAML>=6.0
+gymnasium>=0.28.0
+
+# F1TENTH Gym (install from dev-humble branch)
+# pip install git+https://github.com/f1tenth/f1tenth_gym.git@dev-humble
+# OR clone and install locally:
+#   git clone -b dev-humble https://github.com/f1tenth/f1tenth_gym.git
+#   cd f1tenth_gym && pip install -e .
+
+# RL Libraries
+stable-baselines3[extra]>=2.1.0
+sb3-contrib>=2.1.0
+torch>=2.0.0
+
+# Logging & Visualization
+tensorboard>=2.14.0
+wandb>=0.15.0
+matplotlib>=3.7.0
+tqdm>=4.65.0
+rich>=13.0.0
+
+# Image processing (for map utilities and video recording)
+Pillow>=9.5.0
+scikit-image>=0.21.0
+opencv-python>=4.8.0
+
+# Optional: ROS2 deployment (install via rosdep)
+# rclpy
+# sensor_msgs
+# nav_msgs
+# ackermann_msgs
+# geometry_msgs
+
+# Optional: ONNX export for fast inference
+# onnx>=1.14.0
+# onnxruntime>=1.15.0

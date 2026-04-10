@@ -1,0 +1,129 @@
+# ===================================================================
+# Multi-Agent: Self-Play (RL vs RL)
+# ===================================================================
+#
+# Your agent races against a copy of itself. Every 50,000 steps,
+# the ego policy's weights are copied to the opponent. So the opponent
+# keeps getting better as training progresses — creating an arms race.
+#
+# Timeline of a self-play training run:
+#   Step 0:       Ego (random) vs Opponent (random)
+#   Step 50k:     Ego (decent)  vs Opponent (copied from ego at 50k)
+#   Step 100k:    Ego (good)    vs Opponent (copied from ego at 100k)
+#   Step 150k:    Ego (better)  vs Opponent (copied from ego at 150k)
+#   ...
+#
+# The ego can never "coast" — it always has to improve to stay ahead
+# of its own past self. This produces much more competitive policies
+# than racing against a fixed pure pursuit opponent.
+#
+# This is the same technique used by AlphaStar (StarCraft) and
+# OpenAI Five (Dota 2), just applied to car racing.
+#
+# If you have two physical F1TENTH cars, you can deploy self-play
+# policies on both and have them race each other for real.
+#
+# Usage:
+#   python scripts/train.py --config configs/multi_agent_self_play.yaml \
+#       --map maps/levine_slam/levine_slam --num-envs 8 --device cuda
+# ===================================================================
+
+experiment:
+  name: "self_play"
+  seed: 42
+  device: "auto"
+  runs_dir: "runs"
+  wandb: true
+  wandb_project: "f1tenth_rl"
+
+env:
+  map_path: "maps/levine_slam/levine_slam"
+  map_ext: ".png"
+  num_agents: 2
+  timestep: 0.01
+  integrator: "rk4"
+  num_envs: 8
+  max_steps: 3000
+  num_laps: 1
+
+multi_agent:
+  opponent: "self_play"
+  self_play_update_freq: 50000 # Copy ego → opponent every 50k steps
+
+lidar:
+  raw_beams: 1080
+  fov_deg: 270.0
+  range_max: 30.0
+
+observation:
+  type: "lidar_state"
+  lidar_beams: 108
+  lidar_clip: 10.0
+  lidar_normalize: true
+  include_velocity: true
+  include_yaw_rate: true
+  include_prev_action: true
+  frame_stack: 1
+
+action:
+  type: "continuous"
+  max_speed: 5.0               # Higher speed ceiling for competitive racing
+  min_speed: 0.5
+  max_steer: 0.4189
+  smoothing_alpha: 0.3
+
+reward:
+  type: "cth"
+  collision_penalty: -10.0
+  lap_bonus: 10.0
+  heading_weight: 0.15
+  crosstrack_weight: 0.05      # Looser centerline following (allow racing lines)
+  steering_change_penalty: 0.3
+  wall_proximity_penalty: 0.3
+  wall_proximity_threshold: 0.3
+  speed_weight: 0.1            # Reward speed — this is a race
+  survival_reward: 0.01
+
+algorithm:
+  type: "ppo"
+  total_timesteps: 5_000_000   # Self-play needs more steps to converge
+  ppo:
+    learning_rate: 0.0003
+    n_steps: 2048
+    batch_size: 256
+    n_epochs: 10
+    gamma: 0.99
+    gae_lambda: 0.95
+    clip_range: 0.2
+    ent_coef: 0.005            # More exploration to prevent convergence to one strategy
+    vf_coef: 0.5
+    max_grad_norm: 0.5
+
+network:
+  type: "mlp"
+  mlp:
+    hidden_sizes: [128, 128]
+    activation: "relu"
+  pi_layers: [64, 64]
+  vf_layers: [64, 64]
+
+domain_randomization:
+  enabled: true
+  mode: "curriculum"
+  curriculum_warmup: 0.15
+  curriculum_full: 0.5
+  friction: { enabled: true, range: [0.7, 1.3] }
+  mass: { enabled: true, range: [3.2, 4.2] }
+  lidar_noise: { enabled: true, std: 0.04 }
+
+expert:
+  pure_pursuit:
+    target_speed: 3.0
+
+evaluation:
+  eval_freq: 100000
+  n_eval_episodes: 10
+  deterministic: true
+
+callbacks:
+  checkpoint_freq: 100000

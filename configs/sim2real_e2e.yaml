@@ -1,0 +1,134 @@
+# ===================================================================
+# Sim2Real: End-to-End Policy (Lidar Only, No Localization)
+# ===================================================================
+#
+# This config trains a policy that drives using ONLY lidar and velocity.
+# No particle filter, no localization, no map needed on the real car.
+# The car literally just looks at the walls and decides what to do.
+#
+# This is the simplest and most robust approach for sim-to-real:
+#   - Only 3 files needed on the car: model, config, inference node
+#   - No localization failures to worry about
+#   - Works on any track without a pre-built map
+#
+# The tradeoff: the car can't follow a specific raceline because it
+# doesn't know WHERE on the track it is. It just knows "walls are here".
+#
+# Observation vector (112 dimensions):
+#   [108 lidar beams, velocity, yaw_rate, prev_steer, prev_speed]
+#
+# What makes this different from default.yaml:
+#   - max_speed: 3.0 (conservative, safe for first real-car tests)
+#   - Curriculum domain randomization ON (critical for sim2real)
+#   - Action delay enabled (simulates real hardware latency)
+#   - CTH reward (smoother driving than pure progress)
+#   - Steering change penalty (prevents jerky steering on real car)
+#   - Action smoothing (0.3 alpha = heavily smoothed)
+#
+# Usage:
+#   python scripts/train.py --config configs/sim2real_e2e.yaml \
+#       --map maps/levine_slam/levine_slam --num-envs 12 --device cuda
+# ===================================================================
+
+experiment:
+  name: "sim2real_e2e"
+  seed: 42
+  device: "auto"
+  runs_dir: "runs"
+  wandb: true
+  wandb_project: "f1tenth_rl"
+
+env:
+  map_path: "maps/levine_blocked/levine_blocked"
+  map_ext: ".png"
+  num_agents: 1
+  timestep: 0.01
+  integrator: "rk4"
+  num_envs: 8
+  max_steps: 3000
+  num_laps: 1
+
+lidar:
+  raw_beams: 1080              # Hokuyo UST-10LX
+  fov_deg: 270.0
+  range_max: 30.0
+
+observation:
+  type: "lidar_state"          # Lidar + velocity only — no localization needed
+  lidar_beams: 108
+  lidar_clip: 10.0
+  lidar_normalize: true
+  include_velocity: true
+  include_yaw_rate: true
+  include_steering: false
+  include_prev_action: true
+  frame_stack: 1               # Don't stack frames — timing differs on real car
+
+action:
+  type: "continuous"
+  max_speed: 3.0               # Conservative for real car. Increase after it works.
+  min_speed: 0.5
+  max_steer: 0.4189
+  smoothing_alpha: 0.3         # Heavy smoothing prevents servo jitter on real car
+  steer_dead_zone: 0.0         # OFF during training (used on real car only)
+  max_steer_rate: 0.0          # OFF during training (0 = unlimited)
+
+reward:
+  type: "cth"                  # Cross-track + heading → smoother than "progress"
+  collision_penalty: -10.0
+  lap_bonus: 10.0
+  heading_weight: 0.2          # Reward pointing along the track
+  crosstrack_weight: 0.1       # Penalty for drifting from centerline
+  steering_change_penalty: 0.5 # Penalize jerky steering (smooth is critical for real car)
+  wall_proximity_penalty: 0.5  # Gentle nudge away from walls
+  wall_proximity_threshold: 0.3 # Only penalize within 30cm of walls
+  speed_weight: 0.0            # Don't reward speed — just complete laps safely
+  survival_reward: 0.01        # Tiny reward for staying alive
+
+algorithm:
+  type: "ppo"
+  total_timesteps: 2_000_000   # For real deployment, use 10M-15M
+  ppo:
+    learning_rate: 0.0003
+    n_steps: 2048
+    batch_size: 256
+    n_epochs: 10
+    gamma: 0.99
+    gae_lambda: 0.95
+    clip_range: 0.2
+    ent_coef: 0.001            # Less exploration than default (we know the task)
+    vf_coef: 0.5
+    max_grad_norm: 0.5
+
+network:
+  type: "mlp"
+  mlp:
+    hidden_sizes: [128, 128]   # Smaller network for faster inference on Jetson
+    activation: "relu"
+  pi_layers: [64, 64]
+  vf_layers: [64, 64]
+
+# Domain randomization: THE key ingredient for sim2real transfer.
+# "curriculum" mode = learn to drive first, then learn to be robust.
+domain_randomization:
+  enabled: true
+  mode: "curriculum"           # off → fixed → curriculum (recommended)
+  curriculum_warmup: 0.2       # No DR for first 20% of training
+  curriculum_full: 0.6         # Full DR from 60% onwards
+  friction: { enabled: true, range: [0.7, 1.3] }     # Most important parameter
+  mass: { enabled: true, range: [3.2, 4.2] }
+  lidar_noise: { enabled: true, std: 0.04 }
+  lidar_dropout: { enabled: true, rate: 0.02 }
+  action_delay: { enabled: true, max_steps: 3 }       # ~30ms simulated latency
+
+expert:
+  pure_pursuit:
+    target_speed: 3.0          # Match max_speed
+
+evaluation:
+  eval_freq: 25000
+  n_eval_episodes: 20
+  deterministic: true
+
+callbacks:
+  checkpoint_freq: 50000

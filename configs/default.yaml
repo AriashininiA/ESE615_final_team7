@@ -1,0 +1,467 @@
+# ===================================================================
+# F1TENTH RL — Default Training Configuration
+# ===================================================================
+#
+# This file contains EVERY parameter the framework supports.
+# To create your own experiment, copy this file and change what
+# you need. You don't need to understand all of this to get started —
+# just change the parts you care about and leave the rest as defaults.
+#
+# How to use:
+#   python scripts/train.py --config configs/default.yaml
+#   python scripts/train.py --config configs/default.yaml --total-steps 500000
+#   python scripts/train.py --config configs/default.yaml --map Spielberg --algo sac
+#
+# Any value here can be overridden from the command line. The config
+# file sets the defaults; the CLI flags take priority.
+# ===================================================================
+
+
+# -------------------------------------------------------------------
+# EXPERIMENT SETTINGS
+# -------------------------------------------------------------------
+# These control where your training run gets saved and logged.
+
+experiment:
+  # Give your run a name so you can find it later. If you leave this
+  # empty, it auto-generates something like "ppo_Spielberg_2026-04-09".
+  name: ""
+
+  # Random seed. Using the same seed gives reproducible results.
+  # Change this to get a different random initialization.
+  seed: 42
+
+  # Where to run training:
+  #   "auto"  → Uses GPU if available, otherwise CPU
+  #   "cpu"   → Force CPU (slower but always works)
+  #   "cuda"  → Force GPU (much faster, requires NVIDIA GPU)
+  device: "auto"
+
+  # Directory where all training runs get saved
+  runs_dir: "runs"
+
+  # Weights & Biases: an experiment tracking tool that logs your
+  # training curves, metrics, and hyperparameters to the cloud.
+  # It's free for personal use. When you run training for the first
+  # time, it will ask you to log in (or create an account).
+  # Set wandb: false if you don't want to use it.
+  wandb: true
+  wandb_project: "f1tenth_rl"
+  wandb_entity: null     # Your WandB username or team name (null = default)
+
+
+# -------------------------------------------------------------------
+# ENVIRONMENT
+# -------------------------------------------------------------------
+# The F1TENTH Gym simulates a 1/10 scale race car with a lidar sensor
+# on a 2D racetrack. These settings control the simulation.
+
+env:
+  # Which track to train on. You have two options:
+  #
+  # 1. Built-in tracks (come with F1TENTH Gym, no setup needed):
+  #    "Spielberg", "Monza", "MoscowRaceway", "Catalunya", etc.
+  #
+  # 2. Your own SLAM maps (path to your map, without the file extension):
+  #    "maps/levine_slam/levine_slam"
+  #    "maps/my_building/my_building"
+  map_path: "Spielberg"
+  map_ext: ".png"        # File extension for the map image
+
+  # How many cars on the track. Set to 1 for solo training.
+  # Set to 2 for multi-agent training (racing against an opponent).
+  num_agents: 1
+
+  # Physics simulation settings. Don't change these unless you know
+  # what you're doing. The defaults match the real F1TENTH car dynamics.
+  timestep: 0.01         # 100 Hz simulation (0.01 seconds per step)
+  integrator: "rk4"      # Runge-Kutta 4 for accurate physics
+
+  # How many copies of the environment to run in parallel.
+  # More envs = faster training (more data per second) but more RAM.
+  # With a GPU: 8-16 is a good range. On CPU only: 4-8.
+  num_envs: 8
+
+  # Maximum steps before the episode ends, even if the car hasn't
+  # crashed. At 100 Hz, 3000 steps = 30 seconds of driving.
+  max_steps: 3000
+
+  # How many laps to complete before the episode ends naturally.
+  # After this many laps, the episode ends with a success.
+  num_laps: 1
+
+  # Where the car starts each episode. If null, it starts at the
+  # track's default position. Format: [x, y, heading_angle_radians]
+  start_pose: null
+
+
+# -------------------------------------------------------------------
+# LIDAR SENSOR
+# -------------------------------------------------------------------
+# These settings should match the lidar on your real car.
+# During training, the simulator produces 'raw_beams' lidar rays,
+# which then get downsampled to 'lidar_beams' (see observation section).
+#
+# Common F1TENTH lidars:
+#   Hokuyo UST-10LX:  raw_beams: 1080, fov_deg: 270, range_max: 30
+#   SICK TIM571:       raw_beams: 811,  fov_deg: 270, range_max: 25
+#   RPLiDAR A2:        raw_beams: 400,  fov_deg: 360, range_max: 12
+
+lidar:
+  raw_beams: 1080        # How many beams the real sensor produces
+  fov_deg: 270.0         # Field of view in degrees
+  range_max: 30.0        # Maximum detection range in meters
+
+
+# -------------------------------------------------------------------
+# OBSERVATION SPACE — What the agent sees
+# -------------------------------------------------------------------
+# This is the input to your neural network at each timestep.
+# The right observation space depends on what sensors are available.
+#
+# TYPE OPTIONS:
+#   "lidar_only"     → Just the lidar scan. Simplest, but the agent
+#                      can't tell how fast it's going.
+#
+#   "lidar_state"    → Lidar + velocity + yaw rate. RECOMMENDED.
+#                      Works for end-to-end driving without localization.
+#
+#   "lidar_waypoint" → Lidar + state + waypoint features. Requires
+#                      localization (particle filter) on the real car.
+#                      The agent knows where it is on the track and
+#                      can follow a raceline precisely.
+#
+#   "waypoint_only"  → No lidar, just waypoint features. Only useful
+#                      in simulation or for quick experiments.
+
+observation:
+  type: "lidar_state"
+
+  # After downsampling: how many lidar beams go into the neural network.
+  # The raw 1080 beams get evenly sampled down to this count.
+  # 108 is a good balance — enough detail to see walls and obstacles,
+  # but small enough that the neural network trains quickly.
+  lidar_beams: 108
+
+  # Lidar readings beyond this distance are clipped to this value.
+  # This keeps the inputs bounded (important for neural networks).
+  lidar_clip: 10.0
+
+  # If true, lidar values are divided by lidar_clip so they're in [0, 1].
+  # This helps neural networks learn faster.
+  lidar_normalize: true
+
+  # Extra state information added after the lidar beams:
+  include_velocity: true       # Current speed (normalized by dividing by 10)
+  include_yaw_rate: true       # How fast the car is rotating (normalized by π)
+  include_steering: false      # Current steering angle
+  include_prev_action: true    # What action was taken last step [steer, speed]
+
+  # Waypoint features (only used when type = "lidar_waypoint" or "waypoint_only"):
+  num_waypoints: 5             # How many upcoming waypoints to include
+  waypoint_spacing: 0.5        # Distance between waypoints in meters
+
+  # Frame stacking: include observations from previous timesteps.
+  # 1 = only current frame (recommended). Higher values add history
+  # but make sim-to-real harder because timing differs on real hardware.
+  frame_stack: 1
+
+
+# -------------------------------------------------------------------
+# ACTION SPACE — What the agent controls
+# -------------------------------------------------------------------
+# The neural network outputs steering and speed at each timestep.
+#
+# TYPE OPTIONS:
+#   "continuous" → Steering and speed are continuous values in [-1, 1].
+#                  The wrapper maps these to physical units.
+#                  RECOMMENDED for most tasks.
+#
+#   "discrete"   → Steering and speed are chosen from a fixed grid.
+#                  Simpler for the agent to learn, but less precise.
+#
+#   "residual"   → The agent outputs small corrections on top of a
+#                  base controller (like pure pursuit). The RL agent
+#                  only needs to learn the "delta", not everything
+#                  from scratch.
+
+action:
+  type: "continuous"
+
+  # Speed range in meters per second. The agent's [-1, 1] speed output
+  # gets mapped linearly to [min_speed, max_speed].
+  # Start with a low max_speed (3.0) until your policy is stable,
+  # then increase for faster racing.
+  max_speed: 8.0
+  min_speed: 0.5
+
+  # Maximum steering angle in radians (0.4189 rad ≈ 24 degrees).
+  # This matches the physical F1TENTH car's steering range.
+  max_steer: 0.4189
+
+  # Discrete action space settings (only used when type = "discrete"):
+  num_speed_bins: 5      # How many speed levels
+  num_steer_bins: 7      # How many steering angles
+
+  # Residual action settings (only used when type = "residual"):
+  residual_steer_range: 0.15   # Max steering correction (radians)
+  residual_speed_range: 2.0    # Max speed correction (m/s)
+
+  # Action smoothing: blend the current action with the previous one.
+  # 1.0 = no smoothing (use the raw action directly)
+  # 0.3 = smooth heavily (70% previous action + 30% new action)
+  # Lower values = smoother driving, but the agent reacts more slowly.
+  smoothing_alpha: 1.0
+
+
+# -------------------------------------------------------------------
+# REWARD FUNCTION — What "good driving" means
+# -------------------------------------------------------------------
+# At every timestep, the agent receives a reward number:
+#   positive = "keep doing this"
+#   negative = "stop doing this"
+# The agent's entire goal is to maximize total reward over an episode.
+#
+# TYPE OPTIONS:
+#   "progress" → Reward = how far forward you drove along the track
+#                centerline this step. Simple and effective.
+#
+#   "cth"      → Cross-Track + Heading reward. Rewards staying near
+#                the centerline AND pointing in the right direction.
+#                Produces smoother driving than "progress".
+#
+#   "speed"    → Reward for going fast. Best combined with penalties
+#                to prevent reckless driving.
+
+reward:
+  type: "progress"
+
+  # If you have an optimized raceline, point to it here. The reward
+  # function will use this instead of the auto-generated centerline.
+  raceline_path: null
+
+  # How much to reward forward progress along the track.
+  progress_weight: 10.0
+
+  # How much to reward going fast. Set to 0 if you just want
+  # the agent to complete laps without caring about speed.
+  speed_weight: 0.1
+
+  # Penalty for crashing into a wall. Should be negative and large.
+  collision_penalty: -10.0
+
+  # Bonus for completing a full lap.
+  lap_bonus: 10.0
+
+  # CTH reward weights (only used when type = "cth"):
+  heading_weight: 0.04         # Reward for pointing along the track
+  crosstrack_weight: 0.004     # Penalty for drifting away from center
+
+  # Steering smoothness: penalize large changes in steering between
+  # steps. Higher = smoother steering but potentially slower.
+  # 0.0 = no penalty, 0.5 = moderate, 1.5 = aggressive smoothing.
+  steering_change_penalty: 0.0
+
+  # Small reward just for not crashing. Encourages cautious exploration
+  # early in training.
+  survival_reward: 0.0
+
+
+# -------------------------------------------------------------------
+# RL ALGORITHM
+# -------------------------------------------------------------------
+# Which reinforcement learning algorithm to use.
+#
+#   "ppo"        → Proximal Policy Optimization. The default. Stable
+#                  and well-tested. On-policy (uses fresh data only).
+#
+#   "sac"        → Soft Actor-Critic. Off-policy (reuses old data).
+#                  More sample-efficient, but trickier to tune.
+#
+#   "td3"        → Twin Delayed DDPG. Off-policy, deterministic.
+#
+#   "custom_ppo" → Our from-scratch PPO. Same algorithm as SB3's PPO,
+#                  but every line of code is readable and commented.
+
+algorithm:
+  type: "ppo"
+
+  # Total number of environment steps to train for.
+  # Rule of thumb:
+  #   200k-500k  → Quick test (does the setup work?)
+  #   1M-2M      → Decent policy (completes laps, not optimized)
+  #   5M-10M     → Good policy (fast, smooth, reliable)
+  #   15M+       → Competition-quality
+  total_timesteps: 1_000_000
+
+  ppo:
+    learning_rate: 0.0003      # Adam optimizer step size
+    n_steps: 2048              # Steps collected before each update
+    batch_size: 128            # Minibatch size for SGD
+    n_epochs: 10               # Passes over collected data per update
+    gamma: 0.99                # Discount factor (value future rewards)
+    gae_lambda: 0.95           # GAE parameter (advantage estimation)
+    clip_range: 0.2            # PPO clipping range
+    ent_coef: 0.01             # Entropy bonus (encourages exploration)
+    vf_coef: 0.5               # Value function loss weight
+    max_grad_norm: 0.5         # Gradient clipping
+    use_sde: false             # State-dependent exploration
+
+  sac:
+    learning_rate: 0.0003
+    buffer_size: 1_000_000     # Replay buffer size
+    batch_size: 256
+    tau: 0.005                 # Target network soft update rate
+    gamma: 0.99
+    learning_starts: 10000     # Random actions before learning starts
+    train_freq: 1
+    ent_coef: "auto"           # Auto-tune entropy
+
+  td3:
+    learning_rate: 0.001
+    buffer_size: 1_000_000
+    batch_size: 256
+    tau: 0.005
+    gamma: 0.99
+    learning_starts: 10000
+    train_freq: 1
+    policy_delay: 2            # Actor updates every N critic updates
+
+  custom_ppo:
+    learning_rate: 0.0003
+    num_steps: 2048
+    num_minibatches: 32
+    update_epochs: 10
+    gamma: 0.99
+    gae_lambda: 0.95
+    clip_coef: 0.2
+    ent_coef: 0.01
+    vf_coef: 0.5
+    max_grad_norm: 0.5
+    anneal_lr: true            # Linearly decay learning rate
+    normalize_advantages: true # Normalize advantages per minibatch
+
+
+# -------------------------------------------------------------------
+# NEURAL NETWORK ARCHITECTURE
+# -------------------------------------------------------------------
+#   "mlp"   → Fully connected layers. Works well for most tasks.
+#   "cnn1d" → 1D convolutions on lidar + FC layers. Can learn
+#             spatial patterns in the lidar scan.
+
+network:
+  type: "mlp"
+
+  # MLP hidden layer sizes. [256, 256] is a solid default.
+  # For simple tasks: [128, 128]. For complex tasks: [256, 256].
+  mlp:
+    hidden_sizes: [256, 256]
+    activation: "relu"         # "relu" or "tanh"
+
+  # CNN1D settings (only used when type = "cnn1d"):
+  cnn1d:
+    channels: [32, 64]
+    kernel_sizes: [5, 3]
+    strides: [2, 2]
+    fc_size: 128
+
+  # Separate heads for policy (actor) and value function (critic)
+  shared_layers: false
+  pi_layers: [64, 64]         # Policy head
+  vf_layers: [64, 64]         # Value function head
+
+
+# -------------------------------------------------------------------
+# DOMAIN RANDOMIZATION
+# -------------------------------------------------------------------
+# Makes your policy robust to sim-vs-real differences.
+# Without DR: works in sim, crashes on real car.
+# With DR: works in sim AND on real car (zero-shot transfer).
+#
+# MODE OPTIONS:
+#   "off"        → No randomization. Good for learning basics.
+#   "fixed"      → Full randomization from step 1.
+#   "curriculum" → RECOMMENDED. Gradually increase randomization.
+
+domain_randomization:
+  enabled: false
+
+  friction:
+    enabled: true
+    range: [0.6, 1.4]         # Random tire friction each episode
+
+  mass:
+    enabled: true
+    range: [3.0, 4.5]         # Random vehicle mass (kg)
+
+  lidar_noise:
+    enabled: true
+    std: 0.02                  # Gaussian noise on lidar beams (meters)
+
+  lidar_dropout:
+    enabled: false
+    rate: 0.02                 # Fraction of beams randomly set to zero
+
+  action_delay:
+    enabled: false
+    max_steps: 2               # Random delay before actions take effect
+
+  cornering_stiffness:
+    enabled: false
+    scale_range: [0.8, 1.2]
+
+
+# -------------------------------------------------------------------
+# IMITATION LEARNING
+# -------------------------------------------------------------------
+# Learn from expert demonstrations before RL training.
+# Workflow:
+#   1. python scripts/collect_demos.py --episodes 100
+#   2. python scripts/train.py --bc-pretrain demos/expert.npz
+#   3. Or BC only: python scripts/train.py --bc-pretrain demos/expert.npz --bc-only
+
+imitation:
+  bc:
+    enabled: false
+    demo_path: "demos/expert_demos.npz"
+    epochs: 100
+    learning_rate: 0.001
+    batch_size: 256
+    validation_split: 0.1
+  init_from_bc: false
+  bc_model_path: "runs/bc_pretrained/bc_model.pt"
+
+
+# -------------------------------------------------------------------
+# EXPERT CONTROLLER (PURE PURSUIT)
+# -------------------------------------------------------------------
+# Used for demo collection, as an opponent, and as a baseline.
+
+expert:
+  waypoint_path: null          # Custom raceline path, or null for centerline
+  pure_pursuit:
+    lookahead_distance: 1.0    # Base lookahead distance (meters)
+    adaptive_lookahead: true   # Scale lookahead with speed
+    lookahead_gain: 0.4
+    min_lookahead: 0.5
+    max_lookahead: 2.0
+    target_speed: 5.0          # How fast the expert drives (m/s)
+
+
+# -------------------------------------------------------------------
+# EVALUATION
+# -------------------------------------------------------------------
+evaluation:
+  eval_freq: 50000             # Evaluate every N training steps
+  n_eval_episodes: 10          # Episodes per evaluation
+  deterministic: true          # No exploration noise during eval
+  num_episodes: 50             # Episodes for scripts/evaluate.py
+  render: false
+  save_trajectories: true
+
+
+# -------------------------------------------------------------------
+# CALLBACKS
+# -------------------------------------------------------------------
+callbacks:
+  checkpoint_freq: 50000       # Save the model every N steps

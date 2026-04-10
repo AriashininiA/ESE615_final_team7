@@ -1,0 +1,125 @@
+# ===================================================================
+# Sim2Real: Fast Racing (Up to 6 m/s)
+# ===================================================================
+#
+# This config pushes the car to race as fast as possible while
+# still transferring to real hardware. At 6 m/s on a 1/10 scale car,
+# you're going the equivalent of ~60 km/h full-scale — things happen
+# fast and the margin for error is tiny.
+#
+# Key differences from the safe E2E config:
+#   - max_speed: 6.0 (double the safe config)
+#   - speed_weight: 0.3 (rewards going fast, not just completing laps)
+#   - steering_change_penalty: 1.5 (much higher — jerky steering at
+#     speed causes spins and crashes)
+#   - wall_proximity: higher penalty and wider threshold
+#   - action_delay: 5 steps (50ms — more realistic at high speed)
+#   - Bigger network [256,256] (needs more capacity for complex policy)
+#   - More aggressive DR (wider ranges for friction, noise)
+#   - 15M steps (takes longer to learn high-speed driving)
+#
+# Usage:
+#   python scripts/train.py --config configs/sim2real_fast.yaml \
+#       --map maps/levine_slam/levine_slam --num-envs 12 --device cuda
+# ===================================================================
+
+experiment:
+  name: "sim2real_fast"
+  seed: 42
+  device: "auto"
+  runs_dir: "runs"
+  wandb: true
+  wandb_project: "f1tenth_rl"
+
+env:
+  map_path: "maps/levine_slam/levine_slam"
+  map_ext: ".png"
+  num_agents: 1
+  timestep: 0.01
+  integrator: "rk4"
+  num_envs: 12                 # More envs to get data faster
+  max_steps: 3000
+  num_laps: 1
+
+lidar:
+  raw_beams: 1080
+  fov_deg: 270.0
+  range_max: 30.0
+
+observation:
+  type: "lidar_state"
+  lidar_beams: 108
+  lidar_clip: 10.0
+  lidar_normalize: true
+  include_velocity: true
+  include_yaw_rate: true
+  include_steering: false
+  include_prev_action: true
+  frame_stack: 1
+
+action:
+  type: "continuous"
+  max_speed: 6.0               # 2x the safe config
+  min_speed: 0.5
+  max_steer: 0.4189
+  smoothing_alpha: 0.3
+  steer_dead_zone: 0.0
+  max_steer_rate: 0.0
+
+reward:
+  type: "cth"
+  collision_penalty: -10.0
+  lap_bonus: 10.0
+  heading_weight: 0.2
+  crosstrack_weight: 0.1
+  steering_change_penalty: 1.5 # High — jerky steering at speed = crash
+  wall_proximity_penalty: 1.0  # Stronger wall penalty at high speed
+  wall_proximity_threshold: 0.5 # Wider margin (50cm) because stopping distance is longer
+  speed_weight: 0.3            # Now we DO reward speed
+  survival_reward: 0.01
+
+algorithm:
+  type: "ppo"
+  total_timesteps: 15_000_000  # Takes longer to learn fast driving
+  ppo:
+    learning_rate: 0.0003
+    n_steps: 2048
+    batch_size: 256
+    n_epochs: 10
+    gamma: 0.99
+    gae_lambda: 0.95
+    clip_range: 0.2
+    ent_coef: 0.001
+    vf_coef: 0.5
+    max_grad_norm: 0.5
+
+network:
+  type: "mlp"
+  mlp:
+    hidden_sizes: [256, 256]   # Bigger network for more complex policy
+    activation: "relu"
+  pi_layers: [64, 64]
+  vf_layers: [64, 64]
+
+domain_randomization:
+  enabled: true
+  mode: "curriculum"
+  curriculum_warmup: 0.15      # Start DR slightly earlier
+  curriculum_full: 0.5         # Full DR by halfway
+  friction: { enabled: true, range: [0.6, 1.4] }     # Wider friction range
+  mass: { enabled: true, range: [3.0, 4.5] }
+  lidar_noise: { enabled: true, std: 0.06 }           # More noise
+  lidar_dropout: { enabled: true, rate: 0.03 }
+  action_delay: { enabled: true, max_steps: 5 }       # 50ms — critical at speed
+
+expert:
+  pure_pursuit:
+    target_speed: 6.0
+
+evaluation:
+  eval_freq: 25000
+  n_eval_episodes: 20
+  deterministic: true
+
+callbacks:
+  checkpoint_freq: 50000
