@@ -1,4 +1,4 @@
-Metadata-Version: 2.1
+Metadata-Version: 2.4
 Name: f1tenth_rl
 Version: 1.0.0
 Summary: Modular RL training framework for F1TENTH autonomous racing
@@ -21,3 +21,7 @@ Requires-Dist: wandb>=0.15.0; extra == "wandb"
 Provides-Extra: onnx
 Requires-Dist: onnx>=1.14.0; extra == "onnx"
 Requires-Dist: onnxruntime>=1.15.0; extra == "onnx"
+Dynamic: provides-extra
+Dynamic: requires-dist
+Dynamic: requires-python
+Dynamic: summary

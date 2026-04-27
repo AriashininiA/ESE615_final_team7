@@ -248,7 +248,7 @@ if ROS2_AVAILABLE:
             # Try numpy format first (no SB3 needed), then pickle as fallback
             npz_candidates = [
                 str(Path(model_path).parent / "obs_norm_stats.npz"),
-                model_path.replace(".onnx", "_norm_stats.npz"),
+                model_path.replace(".onnx", "_norm_stats.npz") if model_path.endswith(".onnx") else "",
             ]
             pkl_candidates = [
                 model_path.replace(".onnx", "") + "_vecnormalize.pkl",
@@ -257,14 +257,17 @@ if ROS2_AVAILABLE:
 
             loaded = False
             for npz_path in npz_candidates:
-                if os.path.exists(npz_path):
+                if npz_path and npz_path.endswith(".npz") and os.path.exists(npz_path):
                     try:
                         data = np.load(npz_path)
+                        mean = data["mean"]
+                        var = data["var"]
                         class ObsRMS:
                             pass
-                        self.obs_rms = ObsRMS()
-                        self.obs_rms.mean = data["mean"]
-                        self.obs_rms.var = data["var"]
+                        obs_rms = ObsRMS()
+                        obs_rms.mean = mean
+                        obs_rms.var = var
+                        self.obs_rms = obs_rms
                         self.get_logger().info(f"Loaded normalization stats from {npz_path}")
                         loaded = True
                     except Exception as e:
@@ -277,8 +280,14 @@ if ROS2_AVAILABLE:
                         try:
                             import pickle
                             with open(norm_path, "rb") as f:
-                                self.obs_rms = pickle.load(f).obs_rms
-                            self.get_logger().info(f"Loaded normalization stats from {norm_path}")
+                                vec_norm = pickle.load(f)
+                            if getattr(vec_norm, "norm_obs", False):
+                                self.obs_rms = vec_norm.obs_rms
+                                self.get_logger().info(f"Loaded normalization stats from {norm_path}")
+                            else:
+                                self.get_logger().info(
+                                    f"Found {norm_path}, but norm_obs=False — using raw observations."
+                                )
                         except Exception as e:
                             self.get_logger().warn(f"Failed to load norm stats: {e}")
                         break
