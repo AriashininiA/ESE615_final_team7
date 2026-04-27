@@ -81,8 +81,9 @@ reward:
   crosstrack_weight: 0.1       # Penalty for drifting from centerline
   progress_weight: 0.2         # Used by curriculum reward as forward-progress m/s scale
   steering_change_penalty: 0.5 # Penalize jerky steering (smooth is critical for real car)
-  wall_proximity_penalty: 0.5  # Gentle nudge away from walls
-  wall_proximity_threshold: 0.3 # Only penalize within 30cm of walls
+  wall_proximity_penalty: 2.0  # Stronger nudge away from walls for real-car clearance
+  wall_proximity_mean_penalty: 1.0 # Penalize sustained wall-hugging across many lidar beams
+  wall_proximity_threshold: 0.7 # Start penalizing within 70cm of walls
   speed_weight: 0.05           # Curriculum speed term; ignored by plain CTH
   turn_weight: 0.2             # Penalize high speed while steering hard
   survival_reward: 0.01        # Tiny reward for staying alive

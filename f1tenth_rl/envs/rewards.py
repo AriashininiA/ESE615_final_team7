@@ -55,6 +55,7 @@ class RewardFunction(ABC):
         self.steering_change_penalty = config.get("steering_change_penalty", 0.0)
         self.wall_proximity_penalty = config.get("wall_proximity_penalty", 0.0)
         self.wall_proximity_threshold = config.get("wall_proximity_threshold", 0.5)
+        self.wall_proximity_mean_penalty = config.get("wall_proximity_mean_penalty", 0.0)
         self._progress = 0.0
         self.training_progress = 0.0
 
@@ -83,6 +84,12 @@ class RewardFunction(ABC):
                 # Linear penalty: 0 at threshold, full penalty at 0
                 penalty = 1.0 - (min_dist / self.wall_proximity_threshold)
                 reward -= self.wall_proximity_penalty * penalty
+            if self.wall_proximity_mean_penalty > 0:
+                close = np.clip(
+                    (self.wall_proximity_threshold - scan) / self.wall_proximity_threshold,
+                    0.0, 1.0,
+                )
+                reward -= self.wall_proximity_mean_penalty * float(np.mean(close))
 
         if collision:
             reward = self.collision_penalty

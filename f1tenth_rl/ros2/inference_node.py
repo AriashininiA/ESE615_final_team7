@@ -78,6 +78,7 @@ if ROS2_AVAILABLE:
             self.declare_parameter("waypoint_path", "")        # For localization mode
             self.declare_parameter("watchdog_timeout", 0.5)
             self.declare_parameter("flip_scan", False)         # Reverse scan direction
+            self.declare_parameter("debug_actions", False)
 
             model_path = self.get_parameter("model_path").value
             config_path = self.get_parameter("config_path").value
@@ -93,6 +94,7 @@ if ROS2_AVAILABLE:
             waypoint_path = self.get_parameter("waypoint_path").value
             self.watchdog_timeout = self.get_parameter("watchdog_timeout").value
             self.flip_scan = self.get_parameter("flip_scan").value
+            self.debug_actions = self.get_parameter("debug_actions").value
 
             # ---- Load config ----
             if os.path.exists(config_path):
@@ -182,6 +184,7 @@ if ROS2_AVAILABLE:
                 f"  Scan:      {scan_topic}\n"
                 f"  Odom:      {odom_topic}\n"
                 f"  Drive:     {drive_topic}\n"
+                f"  Flip scan: {self.flip_scan}\n"
                 f"{'='*50}"
             )
 
@@ -389,7 +392,7 @@ if ROS2_AVAILABLE:
             ms = (time.perf_counter() - t0) * 1000
             self.inference_count += 1
             self.total_inference_time += ms
-            if self.inference_count % 200 == 0:
+            if self.debug_actions or self.inference_count % 200 == 0:
                 avg = self.total_inference_time / self.inference_count
                 self.get_logger().info(
                     f"[{avg:.1f}ms] steer={msg.drive.steering_angle:.3f} "
@@ -400,9 +403,15 @@ if ROS2_AVAILABLE:
             """Build observation vector — matches training preprocessing exactly."""
             parts = []
 
-            # 1. Lidar: downsample 1080 → num_beams, clip, normalize
-            stride = max(1, len(self.current_scan) // self.num_beams)
-            scan = self.current_scan[::stride][:self.num_beams]
+            # 1. Lidar: resample full field-of-view to num_beams.
+            # Do not use integer stride here: 819 beams with stride 7 would
+            # silently drop the last 63 beams and shrink the observed FOV.
+            if len(self.current_scan) == self.num_beams:
+                scan = self.current_scan
+            else:
+                src_idx = np.linspace(0, len(self.current_scan) - 1, len(self.current_scan))
+                dst_idx = np.linspace(0, len(self.current_scan) - 1, self.num_beams)
+                scan = np.interp(dst_idx, src_idx, self.current_scan)
             scan = np.clip(scan, 0.0, self.lidar_clip)
             if self.lidar_normalize:
                 scan = scan / self.lidar_clip
