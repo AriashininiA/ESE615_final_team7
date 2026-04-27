@@ -1,0 +1,53 @@
+{
+  "os":  "macOS-15.7.4-arm64-arm-64bit",
+  "python":  "CPython 3.12.7",
+  "startedAt":  "2026-04-27T21:23:13.651757Z",
+  "args":  [
+    "--config",
+    "configs/sim2real_e2e.yaml",
+    "--bc-pretrain",
+    "demos/levine_blocked_pp_3ms.npz",
+    "--algo",
+    "ppo",
+    "--reward-type",
+    "curriculum",
+    "--name",
+    "bc_ppo_curriculum_clearance_mid_levine_safe",
+    "--total-steps",
+    "5000000",
+    "--wandb"
+  ],
+  "program":  "/Users/ariashi/Desktop/auto/rl_final/ESE615_final_team7/scripts/train.py",
+  "codePath":  "scripts/train.py",
+  "codePathLocal":  "scripts/train.py",
+  "git":  {
+    "remote":  "git@github.com:AriashininiA/ESE615_final_team7.git",
+    "commit":  "0e30cd06083992bc0f9042eed42d3c65e6058541"
+  },
+  "email":  "xish@seas.upenn.edu",
+  "root":  "runs/bc_ppo_curriculum_clearance_mid_levine_safe_2026-04-27_17-23-11",
+  "host":  "MacBook-Pro-117.local",
+  "executable":  "/opt/anaconda3/bin/python",
+  "cpu_count":  8,
+  "cpu_count_logical":  8,
+  "disk":  {
+    "/":  {
+      "total":  "494384795648",
+      "used":  "437369364480"
+    }
+  },
+  "memory":  {
+    "total":  "17179869184"
+  },
+  "apple":  {
+    "name":  "Apple M1 Pro",
+    "ecpuCores":  2,
+    "pcpuCores":  6,
+    "gpuCores":  14,
+    "memoryGb":  16,
+    "swapTotalBytes":  "7516192768",
+    "ramTotalBytes":  "17179869184",
+    "macModel":  "MacBookPro18,3"
+  },
+  "writerId":  "1j95vyompa4nbq3hxd9p355ouohsvzxc"
+}

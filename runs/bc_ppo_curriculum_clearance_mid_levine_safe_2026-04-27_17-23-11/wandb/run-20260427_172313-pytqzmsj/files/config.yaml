@@ -1,0 +1,244 @@
+_wandb:
+    value:
+        cli_version: 0.26.0
+        code_path: code/scripts/train.py
+        e:
+            1j95vyompa4nbq3hxd9p355ouohsvzxc:
+                apple:
+                    ecpuCores: 2
+                    gpuCores: 14
+                    macModel: MacBookPro18,3
+                    memoryGb: 16
+                    name: Apple M1 Pro
+                    pcpuCores: 6
+                    ramTotalBytes: "17179869184"
+                    swapTotalBytes: "7516192768"
+                args:
+                    - --config
+                    - configs/sim2real_e2e.yaml
+                    - --bc-pretrain
+                    - demos/levine_blocked_pp_3ms.npz
+                    - --algo
+                    - ppo
+                    - --reward-type
+                    - curriculum
+                    - --name
+                    - bc_ppo_curriculum_clearance_mid_levine_safe
+                    - --total-steps
+                    - "5000000"
+                    - --wandb
+                codePath: scripts/train.py
+                codePathLocal: scripts/train.py
+                cpu_count: 8
+                cpu_count_logical: 8
+                disk:
+                    /:
+                        total: "494384795648"
+                        used: "437369364480"
+                email: xish@seas.upenn.edu
+                executable: /opt/anaconda3/bin/python
+                git:
+                    commit: 0e30cd06083992bc0f9042eed42d3c65e6058541
+                    remote: git@github.com:AriashininiA/ESE615_final_team7.git
+                host: MacBook-Pro-117.local
+                memory:
+                    total: "17179869184"
+                os: macOS-15.7.4-arm64-arm-64bit
+                program: /Users/ariashi/Desktop/auto/rl_final/ESE615_final_team7/scripts/train.py
+                python: CPython 3.12.7
+                root: runs/bc_ppo_curriculum_clearance_mid_levine_safe_2026-04-27_17-23-11
+                startedAt: "2026-04-27T21:23:13.651757Z"
+                writerId: 1j95vyompa4nbq3hxd9p355ouohsvzxc
+        m:
+            - "1": bc/epoch
+              "6":
+                - 3
+              "7": []
+            - "2": bc/*
+              "5": 1
+              "6":
+                - 1
+              "7": []
+        python_version: 3.12.7
+        t:
+            "1":
+                - 1
+            "2":
+                - 1
+            "3":
+                - 2
+                - 7
+                - 13
+                - 15
+                - 16
+                - 35
+                - 41
+                - 61
+                - 62
+            "4": 3.12.7
+            "5": 0.26.0
+            "8":
+                - 2
+            "10":
+                - 21
+            "12": 0.26.0
+            "13": darwin-arm64
+act_dim:
+    value: 2
+action:
+    value:
+        max_speed: 3
+        max_steer: 0.4189
+        max_steer_rate: 0
+        min_speed: 0.5
+        smoothing_alpha: 0.3
+        steer_dead_zone: 0
+        type: continuous
+algorithm:
+    value:
+        ppo:
+            batch_size: 256
+            clip_range: 0.2
+            ent_coef: 0.001
+            gae_lambda: 0.95
+            gamma: 0.99
+            learning_rate: 0.0003
+            max_grad_norm: 0.5
+            n_epochs: 10
+            n_steps: 2048
+            vf_coef: 0.5
+        total_timesteps: 5000000
+        type: ppo
+bc/action_dim:
+    value: 2
+bc/demo_path:
+    value: /Users/ariashi/Desktop/auto/rl_final/ESE615_final_team7/demos/levine_blocked_pp_3ms.npz
+bc/demo_transitions:
+    value: 234525
+bc/obs_dim:
+    value: 112
+callbacks:
+    value:
+        checkpoint_freq: 50000
+domain_randomization:
+    value:
+        action_delay:
+            enabled: true
+            max_steps: 3
+        curriculum_full: 0.6
+        curriculum_warmup: 0.2
+        enabled: true
+        friction:
+            enabled: true
+            range:
+                - 0.7
+                - 1.3
+        lidar_dropout:
+            enabled: true
+            rate: 0.02
+        lidar_noise:
+            enabled: true
+            std: 0.04
+        mass:
+            enabled: true
+            range:
+                - 3.2
+                - 4.2
+        mode: curriculum
+env:
+    value:
+        integrator: rk4
+        map_ext: .png
+        map_path: maps/levine_blocked/levine_blocked
+        max_steps: 3000
+        num_agents: 1
+        num_envs: 8
+        num_laps: 1
+        timestep: 0.01
+evaluation:
+    value:
+        deterministic: true
+        eval_freq: 25000
+        n_eval_episodes: 20
+experiment:
+    value:
+        device: auto
+        log_dir: runs/bc_ppo_curriculum_clearance_mid_levine_safe_2026-04-27_17-23-11/logs
+        name: bc_ppo_curriculum_clearance_mid_levine_safe
+        run_dir: runs/bc_ppo_curriculum_clearance_mid_levine_safe_2026-04-27_17-23-11
+        run_name: bc_ppo_curriculum_clearance_mid_levine_safe_2026-04-27_17-23-11
+        run_timestamp: 2026-04-27_17-23-11
+        runs_dir: runs
+        save_dir: runs/bc_ppo_curriculum_clearance_mid_levine_safe_2026-04-27_17-23-11/checkpoints
+        seed: 42
+        wandb: true
+        wandb_project: f1tenth_rl
+expert:
+    value:
+        pure_pursuit:
+            target_speed: 3
+lidar:
+    value:
+        fov_deg: 270
+        range_max: 30
+        raw_beams: 1080
+network:
+    value:
+        mlp:
+            activation: relu
+            hidden_sizes:
+                - 128
+                - 128
+        pi_layers:
+            - 64
+            - 64
+        type: mlp
+        vf_layers:
+            - 64
+            - 64
+num_envs:
+    value: 8
+obs_dim:
+    value: 112
+observation:
+    value:
+        frame_stack: 1
+        include_prev_action: true
+        include_steering: false
+        include_velocity: true
+        include_yaw_rate: true
+        lidar_beams: 108
+        lidar_clip: 10
+        lidar_normalize: true
+        type: lidar_state
+reward:
+    value:
+        collision_penalty: -10
+        crosstrack_weight: 0.1
+        cth_weight_end: 0.25
+        cth_weight_start: 1
+        curriculum_full: 0.8
+        curriculum_schedule: smoothstep
+        curriculum_update_freq: 1000
+        curriculum_warmup: 0.1
+        heading_weight: 0.2
+        lap_bonus: 10
+        progress_weight: 0.2
+        progress_weight_end: 1
+        progress_weight_start: 0.1
+        speed_weight: 0.05
+        speed_weight_end: 1
+        speed_weight_start: 0
+        steering_change_penalty: 0.5
+        survival_reward: 0.01
+        turn_weight: 0.2
+        turn_weight_end: 1
+        turn_weight_start: 0.05
+        type: curriculum
+        wall_proximity_mean_penalty: 0.4
+        wall_proximity_penalty: 1.2
+        wall_proximity_threshold: 0.55
+rl_algorithm:
+    value: ppo
+run_dir:
+    value: runs/bc_ppo_curriculum_clearance_mid_levine_safe_2026-04-27_17-23-11
