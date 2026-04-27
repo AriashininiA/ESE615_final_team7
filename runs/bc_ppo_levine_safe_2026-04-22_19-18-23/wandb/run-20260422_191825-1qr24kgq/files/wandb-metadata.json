@@ -1,0 +1,50 @@
+{
+  "os":  "macOS-15.7.4-arm64-arm-64bit",
+  "python":  "CPython 3.12.7",
+  "startedAt":  "2026-04-22T23:18:25.605407Z",
+  "args":  [
+    "--config",
+    "configs/sim2real_e2e.yaml",
+    "--bc-pretrain",
+    "demos/levine_blocked_pp_3ms.npz",
+    "--algo",
+    "ppo",
+    "--name",
+    "bc_ppo_levine_safe",
+    "--total-steps",
+    "5000000"
+  ],
+  "program":  "/Users/ariashi/Desktop/auto/rl_final/f1tenth_rl_humble/scripts/train.py",
+  "codePath":  "scripts/train.py",
+  "codePathLocal":  "scripts/train.py",
+  "git":  {
+    "remote":  "git@github.com:AriashininiA/f1tenth_rl_humble.git",
+    "commit":  "8f3f2acc7f6d9f38d19aab6519f6a6959b4d7f6e"
+  },
+  "email":  "xish@seas.upenn.edu",
+  "root":  "runs/bc_ppo_levine_safe_2026-04-22_19-18-23",
+  "host":  "MacBook-Pro-117.local",
+  "executable":  "/opt/anaconda3/bin/python",
+  "cpu_count":  8,
+  "cpu_count_logical":  8,
+  "disk":  {
+    "/":  {
+      "total":  "494384795648",
+      "used":  "424414380032"
+    }
+  },
+  "memory":  {
+    "total":  "17179869184"
+  },
+  "apple":  {
+    "name":  "Apple M1 Pro",
+    "ecpuCores":  2,
+    "pcpuCores":  6,
+    "gpuCores":  14,
+    "memoryGb":  16,
+    "swapTotalBytes":  "4294967296",
+    "ramTotalBytes":  "17179869184",
+    "macModel":  "MacBookPro18,3"
+  },
+  "writerId":  "h5vzsaxabcbzjyu2r2m2adxxrr53ghxp"
+}

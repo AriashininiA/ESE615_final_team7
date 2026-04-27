@@ -171,6 +171,52 @@ class CurriculumDRCallback(BaseCallback):
         return True
 
 
+class RewardCurriculumCallback(BaseCallback):
+    """
+    Pushes global training progress into curriculum-shaped rewards.
+
+    This keeps reward scheduling tied to SB3's true num_timesteps instead of
+    each subprocess guessing from its local step counter.
+    """
+
+    def __init__(self, total_timesteps: int, use_wandb: bool = False,
+                 update_freq: int = 1000, verbose: int = 0):
+        super().__init__(verbose)
+        self.total_timesteps = max(int(total_timesteps), 1)
+        self.use_wandb = use_wandb
+        self.update_freq = max(int(update_freq), 1)
+
+    def _on_training_start(self) -> None:
+        self._update_reward_progress(0.0)
+
+    def _on_step(self) -> bool:
+        if self.n_calls % self.update_freq == 0:
+            progress = min(self.num_timesteps / self.total_timesteps, 1.0)
+            self._update_reward_progress(progress)
+        return True
+
+    def _update_reward_progress(self, progress: float):
+        states = []
+        try:
+            states = self.training_env.env_method("set_reward_training_progress", progress)
+        except Exception:
+            return
+
+        state = next((s for s in states if isinstance(s, dict) and s), {})
+        if not state:
+            return
+
+        for key, value in state.items():
+            self.logger.record(key, value)
+
+        if self.use_wandb:
+            try:
+                import wandb
+                wandb.log(state, step=self.num_timesteps)
+            except Exception:
+                pass
+
+
 class SelfPlayCallback(BaseCallback):
     """
     Self-play: periodically saves ego policy to a shared file so

@@ -65,7 +65,7 @@ env:
   # 2. Your own SLAM maps (path to your map, without the file extension):
   #    "maps/levine_slam/levine_slam"
   #    "maps/my_building/my_building"
-  map_path: "Spielberg"
+  map_path: "maps/levine_blocked/levine_blocked"
   map_ext: ".png"        # File extension for the map image
 
   # How many cars on the track. Set to 1 for solo training.
@@ -232,6 +232,9 @@ action:
 #
 #   "speed"    → Reward for going fast. Best combined with penalties
 #                to prevent reckless driving.
+#
+#   "curriculum" → Starts mostly like CTH, then shifts toward progress
+#                  and speed while keeping CTH as a soft constraint.
 
 reward:
   type: "progress"
@@ -246,6 +249,29 @@ reward:
   # How much to reward going fast. Set to 0 if you just want
   # the agent to complete laps without caring about speed.
   speed_weight: 0.1
+
+  # Curriculum reward shaping (only used when type = "curriculum"):
+  # The base terms are:
+  #   R = cth_mix * R_cth
+  #     + progress_mix * progress_weight * forward_progress_m_per_s
+  #     + speed_mix * speed_weight * speed
+  #     - turn_mix * turn_weight * abs(steering) * speed
+  #
+  # Early: CTH dominates for stable lane following.
+  # Late: progress/speed dominate; CTH remains as a soft constraint.
+  curriculum_warmup: 0.1
+  curriculum_full: 0.8
+  curriculum_schedule: "smoothstep"
+  curriculum_update_freq: 1000
+  cth_weight_start: 1.0
+  cth_weight_end: 0.25
+  progress_weight_start: 0.1
+  progress_weight_end: 1.0
+  speed_weight_start: 0.0
+  speed_weight_end: 1.0
+  turn_weight: 0.2
+  turn_weight_start: 0.05
+  turn_weight_end: 1.0
 
   # Penalty for crashing into a wall. Should be negative and large.
   collision_penalty: -10.0

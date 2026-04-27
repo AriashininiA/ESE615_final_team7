@@ -36,7 +36,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any, Callable, Tuple
 
 from f1tenth_rl.envs.observations import ObservationBuilder
-from f1tenth_rl.envs.rewards import ProgressReward, CTHReward, SpeedReward
+from f1tenth_rl.envs.rewards import ProgressReward, CTHReward, SpeedReward, CurriculumReward
 from f1tenth_rl.envs.domain_randomization import DomainRandomizationWrapper
 
 
@@ -346,6 +346,8 @@ class F1TenthWrapper(gym.Env):
             return CTHReward(rew_cfg, wp)
         elif reward_type == "speed":
             return SpeedReward(rew_cfg, wp)
+        elif reward_type == "curriculum":
+            return CurriculumReward(rew_cfg, wp, timestep=self.timestep)
         else:
             return ProgressReward(rew_cfg, wp)
 
@@ -527,6 +529,18 @@ class F1TenthWrapper(gym.Env):
             "physical_action": physical_action[self.ego_idx].copy(),
         })
         return observation, float(reward), terminated, truncated, info
+
+    def set_reward_training_progress(self, progress: float):
+        """Set reward curriculum progress from SB3 callbacks."""
+        if hasattr(self.reward_fn, "set_training_progress"):
+            self.reward_fn.set_training_progress(progress)
+        return self.get_reward_curriculum_state()
+
+    def get_reward_curriculum_state(self):
+        """Return reward schedule state for logging."""
+        if hasattr(self.reward_fn, "get_curriculum_state"):
+            return self.reward_fn.get_curriculum_state()
+        return {}
 
     def render(self):
         if self.render_mode is not None:

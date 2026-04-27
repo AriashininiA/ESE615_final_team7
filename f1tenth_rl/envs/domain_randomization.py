@@ -122,6 +122,18 @@ class DomainRandomizationWrapper(gym.Wrapper):
         """Return current strength — callable via env_method for logging."""
         return self._strength
 
+    def set_reward_training_progress(self, progress: float):
+        """Forward reward curriculum progress through the DR wrapper."""
+        if hasattr(self.env, "set_reward_training_progress"):
+            return self.env.set_reward_training_progress(progress)
+        return {}
+
+    def get_reward_curriculum_state(self):
+        """Forward reward curriculum state through the DR wrapper."""
+        if hasattr(self.env, "get_reward_curriculum_state"):
+            return self.env.get_reward_curriculum_state()
+        return {}
+
     def update_curriculum(self, progress: float):
         """
         Update curriculum strength based on training progress.

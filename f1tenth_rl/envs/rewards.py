@@ -26,6 +26,10 @@ Available reward types:
                      with penalties (collision, steering, wall proximity)
                      to prevent the agent from just flooring it into walls.
 
+    CurriculumReward → Starts as mostly CTH for safe lane-following,
+                       then gradually shifts toward forward progress and
+                       speed while keeping CTH as a soft constraint.
+
 Each reward type can be combined with optional penalties:
     - collision_penalty: large negative reward when the car crashes
     - steering_change_penalty: penalizes jerky steering between steps
@@ -52,6 +56,7 @@ class RewardFunction(ABC):
         self.wall_proximity_penalty = config.get("wall_proximity_penalty", 0.0)
         self.wall_proximity_threshold = config.get("wall_proximity_threshold", 0.5)
         self._progress = 0.0
+        self.training_progress = 0.0
 
     def reset(self, obs_dict: Dict, ego_idx: int):
         self._progress = 0.0
@@ -91,6 +96,14 @@ class RewardFunction(ABC):
 
     def get_progress(self) -> float:
         return self._progress
+
+    def set_training_progress(self, progress: float):
+        """Update the reward curriculum progress [0, 1]. No-op by default."""
+        self.training_progress = float(np.clip(progress, 0.0, 1.0))
+
+    def get_curriculum_state(self) -> Dict[str, float]:
+        """Return schedule values for logging. Empty for non-curriculum rewards."""
+        return {}
 
 
 class ProgressReward(RewardFunction):
@@ -219,6 +232,149 @@ class SpeedReward(RewardFunction):
         return self.speed_weight * max(0, float(obs_dict["linear_vels_x"][ego_idx]))
 
 
+class CurriculumReward(RewardFunction):
+    """
+    Scheduled racing reward.
+
+    Early training emphasizes CTH so the agent learns stable, centered driving.
+    As training progresses, CTH decays into a soft constraint and progress/speed
+    become dominant. A curvature-aware turn penalty discourages carrying high
+    speed while asking for large steering.
+    """
+
+    def __init__(self, config: Dict[str, Any], waypoints: np.ndarray, timestep: float = 0.01):
+        super().__init__(config)
+        self.waypoints = waypoints[:, :2]
+        self.timestep = max(float(timestep), 1e-6)
+
+        self.heading_weight = config.get("heading_weight", 0.2)
+        self.crosstrack_weight = config.get("crosstrack_weight", 0.1)
+        self.progress_weight = config.get("progress_weight", 0.2)
+        self.speed_weight = config.get("speed_weight", 0.05)
+        self.turn_weight = config.get("turn_weight", 0.2)
+
+        self.cth_start = config.get("cth_weight_start", 1.0)
+        self.cth_end = config.get("cth_weight_end", 0.25)
+        self.progress_start = config.get("progress_weight_start", 0.1)
+        self.progress_end = config.get("progress_weight_end", 1.0)
+        self.speed_start = config.get("speed_weight_start", 0.0)
+        self.speed_end = config.get("speed_weight_end", 1.0)
+        self.turn_start = config.get("turn_weight_start", 0.05)
+        self.turn_end = config.get("turn_weight_end", 1.0)
+        self.warmup = config.get("curriculum_warmup", 0.1)
+        self.full = config.get("curriculum_full", 0.8)
+        self.schedule = config.get("curriculum_schedule", "smoothstep")
+
+        diffs = np.diff(self.waypoints, axis=0)
+        self.wp_headings = np.arctan2(diffs[:, 1], diffs[:, 0])
+        self.wp_headings = np.append(self.wp_headings, self.wp_headings[-1])
+        seg_lengths = np.sqrt((diffs ** 2).sum(axis=1))
+        self.cumulative_dist = np.concatenate([[0], np.cumsum(seg_lengths)])
+        self.total_length = max(float(self.cumulative_dist[-1]), 1e-6)
+        self.prev_progress_dist = 0.0
+        self._state = {}
+
+    def _reset_impl(self, obs_dict, ego_idx):
+        x, y = float(obs_dict["poses_x"][ego_idx]), float(obs_dict["poses_y"][ego_idx])
+        self.prev_progress_dist = self._get_progress_dist(x, y)
+        self._progress = 0.0
+
+    def _compute_impl(self, obs_dict, ego_idx, action) -> float:
+        x = float(obs_dict["poses_x"][ego_idx])
+        y = float(obs_dict["poses_y"][ego_idx])
+        theta = float(obs_dict["poses_theta"][ego_idx])
+        vel = max(0.0, float(obs_dict["linear_vels_x"][ego_idx]))
+
+        dists = np.sqrt((self.waypoints[:, 0] - x)**2 + (self.waypoints[:, 1] - y)**2)
+        closest = int(np.argmin(dists))
+        crosstrack = float(dists[closest])
+        heading_err = self._norm_angle(theta - self.wp_headings[closest])
+
+        current_dist = self.cumulative_dist[closest]
+        delta = current_dist - self.prev_progress_dist
+        if delta < -self.total_length * 0.5:
+            delta += self.total_length
+        elif delta > self.total_length * 0.5:
+            delta -= self.total_length
+        self.prev_progress_dist = current_dist
+
+        forward_delta = max(0.0, float(delta))
+        self._progress += forward_delta / self.total_length
+        progress_rate = forward_delta / self.timestep
+
+        cth_reward = self.heading_weight * vel * np.cos(heading_err) - self.crosstrack_weight * crosstrack
+        progress_reward = self.progress_weight * progress_rate
+        speed_reward = self.speed_weight * vel
+        turn_penalty = self.turn_weight * abs(float(action[0])) * vel
+
+        weights = self._scheduled_weights()
+        reward = (
+            weights["cth"] * cth_reward
+            + weights["progress"] * progress_reward
+            + weights["speed"] * speed_reward
+            - weights["turn"] * turn_penalty
+        )
+
+        self._state = {
+            "reward/curriculum_progress": self.training_progress,
+            "reward/cth_mix": weights["cth"],
+            "reward/progress_mix": weights["progress"],
+            "reward/speed_mix": weights["speed"],
+            "reward/turn_mix": weights["turn"],
+        }
+        return reward
+
+    def _scheduled_weights(self) -> Dict[str, float]:
+        t = self._phase()
+        return {
+            "cth": self._lerp(self.cth_start, self.cth_end, t),
+            "progress": self._lerp(self.progress_start, self.progress_end, t),
+            "speed": self._lerp(self.speed_start, self.speed_end, t),
+            "turn": self._lerp(self.turn_start, self.turn_end, t),
+        }
+
+    def _phase(self) -> float:
+        if self.full <= self.warmup:
+            raw = 1.0 if self.training_progress >= self.full else 0.0
+        elif self.training_progress <= self.warmup:
+            raw = 0.0
+        elif self.training_progress >= self.full:
+            raw = 1.0
+        else:
+            raw = (self.training_progress - self.warmup) / (self.full - self.warmup)
+
+        if self.schedule == "linear":
+            return float(np.clip(raw, 0.0, 1.0))
+        raw = float(np.clip(raw, 0.0, 1.0))
+        return raw * raw * (3.0 - 2.0 * raw)
+
+    @staticmethod
+    def _lerp(start: float, end: float, t: float) -> float:
+        return float(start + (end - start) * t)
+
+    def _get_progress_dist(self, x, y):
+        dists = np.sqrt((self.waypoints[:, 0] - x)**2 + (self.waypoints[:, 1] - y)**2)
+        return self.cumulative_dist[np.argmin(dists)]
+
+    def get_curriculum_state(self) -> Dict[str, float]:
+        if self._state:
+            return dict(self._state)
+        weights = self._scheduled_weights()
+        return {
+            "reward/curriculum_progress": self.training_progress,
+            "reward/cth_mix": weights["cth"],
+            "reward/progress_mix": weights["progress"],
+            "reward/speed_mix": weights["speed"],
+            "reward/turn_mix": weights["turn"],
+        }
+
+    @staticmethod
+    def _norm_angle(a):
+        while a > np.pi: a -= 2 * np.pi
+        while a < -np.pi: a += 2 * np.pi
+        return a
+
+
 # ============================================================
 # Waypoint loading (file-based fallback)
 # ============================================================
@@ -255,4 +411,6 @@ def make_reward_function(config: Dict[str, Any], map_path: str) -> RewardFunctio
         return CTHReward(config, wp)
     elif reward_type == "speed":
         return SpeedReward(config, wp)
+    elif reward_type == "curriculum":
+        return CurriculumReward(config, wp)
     return ProgressReward(config, wp)

@@ -20,6 +20,7 @@ Run organization:
 import os
 import yaml
 import numpy as np
+import torch
 from datetime import datetime
 from typing import Dict, Any, Optional
 from pathlib import Path
@@ -34,7 +35,13 @@ from stable_baselines3.common.vec_env import VecNormalize
 
 from f1tenth_rl.envs.wrapper import make_vec_env, make_env
 from f1tenth_rl.agents.networks import get_policy_kwargs
-from f1tenth_rl.utils.callbacks import RacingMetricsCallback, WandbSafeCallback, CurriculumDRCallback, SelfPlayCallback
+from f1tenth_rl.utils.callbacks import (
+    RacingMetricsCallback,
+    WandbSafeCallback,
+    CurriculumDRCallback,
+    RewardCurriculumCallback,
+    SelfPlayCallback,
+)
 
 
 class SB3Trainer:
@@ -64,18 +71,24 @@ class SB3Trainer:
         self.device = config["experiment"].get("device", "auto")
 
         # ---- Build run directory name ----
-        exp_name = config["experiment"].get("name", "")
-        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-
-        if exp_name:
-            self.run_name = f"{exp_name}_{timestamp}"
+        experiment_cfg = config["experiment"]
+        if experiment_cfg.get("run_dir") and experiment_cfg.get("run_name"):
+            self.run_name = experiment_cfg["run_name"]
+            self.run_dir = experiment_cfg["run_dir"]
         else:
-            map_name = Path(config["env"]["map_path"]).stem
-            self.run_name = f"{self.algo_type}_{map_name}_{timestamp}"
+            exp_name = experiment_cfg.get("name", "")
+            timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+
+            if exp_name:
+                self.run_name = f"{exp_name}_{timestamp}"
+            else:
+                map_name = Path(config["env"]["map_path"]).stem
+                self.run_name = f"{self.algo_type}_{map_name}_{timestamp}"
+
+            runs_dir = experiment_cfg.get("runs_dir", "runs")
+            self.run_dir = os.path.join(runs_dir, self.run_name)
 
         # ---- Create run directory structure ----
-        runs_dir = config["experiment"].get("runs_dir", "runs")
-        self.run_dir = os.path.join(runs_dir, self.run_name)
         self.checkpoint_dir = os.path.join(self.run_dir, "checkpoints")
         self.best_model_dir = os.path.join(self.run_dir, "best_model")
         self.eval_dir = os.path.join(self.run_dir, "eval")
@@ -192,6 +205,18 @@ class SB3Trainer:
         try:
             import wandb
 
+            if wandb.run is not None:
+                self.wandb_run = wandb.run
+                wandb.config.update({
+                    "obs_dim": self.train_env.observation_space.shape[0],
+                    "act_dim": self.train_env.action_space.shape[0],
+                    "num_envs": self.config["env"].get("num_envs", 8),
+                    "run_dir": self.run_dir,
+                    "rl_algorithm": self.algo_type,
+                }, allow_val_change=True)
+                print(f"  WandB run: {wandb.run.get_url()}")
+                return True
+
             wandb_cfg = self.config["experiment"]
             self.wandb_run = wandb.init(
                 project=wandb_cfg.get("wandb_project", "f1tenth_rl"),
@@ -246,6 +271,7 @@ class SB3Trainer:
 
         # ---- Save final model ----
         self._save_final()
+        best_pt_path = self._save_best_policy_pt()
 
         # ---- Log final artifacts to WandB ----
         if use_wandb:
@@ -258,6 +284,8 @@ class SB3Trainer:
         print(f"  Run directory: {self.run_dir}")
         print(f"  Final model:   {self.run_dir}/final_model.zip")
         print(f"  Best model:    {self.best_model_dir}/best_model.zip")
+        if best_pt_path:
+            print(f"  Best .pt:      {best_pt_path}")
         print(f"{'='*60}\n")
 
     def _build_callbacks(self, use_wandb: bool):
@@ -294,6 +322,15 @@ class SB3Trainer:
         # ---- Racing metrics callback ----
         callbacks.append(RacingMetricsCallback(use_wandb=use_wandb))
 
+        # ---- Reward curriculum callback ----
+        reward_cfg = self.config.get("reward", {})
+        if reward_cfg.get("type") == "curriculum":
+            callbacks.append(RewardCurriculumCallback(
+                total_timesteps=self.total_timesteps,
+                use_wandb=use_wandb,
+                update_freq=reward_cfg.get("curriculum_update_freq", 1000),
+            ))
+
         # ---- Curriculum domain randomization callback ----
         dr_cfg = self.config.get("domain_randomization", {})
         dr_mode = dr_cfg.get("mode", "fixed" if dr_cfg.get("enabled", False) else "off")
@@ -328,6 +365,33 @@ class SB3Trainer:
             norm_path = os.path.join(self.run_dir, "final_vecnormalize.pkl")
             self.train_env.save(norm_path)
 
+    def _save_best_policy_pt(self):
+        """Save the best policy weights as a PyTorch checkpoint."""
+        pt_path = os.path.join(self.best_model_dir, "best_model.pt")
+        best_model_base = os.path.join(self.best_model_dir, "best_model")
+        best_model_zip = best_model_base + ".zip"
+
+        if os.path.exists(best_model_zip):
+            model_for_export = self.ALGORITHMS[self.algo_type].load(
+                best_model_base,
+                device=self.device,
+            )
+            source_model = best_model_zip
+        else:
+            # Short smoke-test runs may finish before EvalCallback saves a best model.
+            model_for_export = self.model
+            source_model = os.path.join(self.run_dir, "final_model.zip")
+
+        torch.save({
+            "policy_state_dict": model_for_export.policy.state_dict(),
+            "config": self.config,
+            "algorithm": self.algo_type,
+            "source_model": source_model,
+            "run_name": self.run_name,
+            "run_dir": self.run_dir,
+        }, pt_path)
+        return pt_path
+
     def _log_wandb_artifacts(self):
         """Upload models to WandB as artifacts."""
         try:
@@ -355,6 +419,9 @@ class SB3Trainer:
                     description=f"Best eval {self.algo_type.upper()} model",
                 )
                 best_artifact.add_file(best_path)
+                best_pt_path = os.path.join(self.best_model_dir, "best_model.pt")
+                if os.path.exists(best_pt_path):
+                    best_artifact.add_file(best_pt_path)
                 wandb.log_artifact(best_artifact)
 
         except Exception as e:

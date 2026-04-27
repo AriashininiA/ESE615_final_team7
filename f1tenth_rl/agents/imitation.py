@@ -86,6 +86,7 @@ class ImitationTrainer:
         self.model = None
         self.obs_data = None
         self.act_data = None
+        self.demo_path = None
 
     def load_demonstrations(self, path: str):
         """
@@ -103,10 +104,29 @@ class ImitationTrainer:
         data = np.load(path)
         self.obs_data = data["observations"].astype(np.float32)
         self.act_data = data["actions"].astype(np.float32)
+        self.demo_path = path
 
         print(f"Loaded {len(self.obs_data)} demonstration transitions")
         print(f"  Observation shape: {self.obs_data.shape}")
         print(f"  Action shape: {self.act_data.shape}")
+
+        try:
+            import wandb
+
+            if wandb.run is not None:
+                wandb.config.update({
+                    "bc/demo_path": path,
+                    "bc/demo_transitions": len(self.obs_data),
+                    "bc/obs_dim": self.obs_data.shape[1],
+                    "bc/action_dim": self.act_data.shape[1],
+                }, allow_val_change=True)
+                wandb.log({
+                    "bc/demo_transitions": len(self.obs_data),
+                    "bc/obs_dim": self.obs_data.shape[1],
+                    "bc/action_dim": self.act_data.shape[1],
+                })
+        except ImportError:
+            pass
 
     def train_bc(self, obs_data=None, act_data=None) -> nn.Module:
         """
@@ -212,6 +232,19 @@ class ImitationTrainer:
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
 
+            try:
+                import wandb
+
+                if wandb.run is not None:
+                    wandb.log({
+                        "bc/epoch": epoch + 1,
+                        "bc/train_loss": train_loss,
+                        "bc/val_loss": val_loss,
+                        "bc/best_val_loss": best_val_loss,
+                    })
+            except ImportError:
+                pass
+
             if (epoch + 1) % 10 == 0 or epoch == 0:
                 print(
                     f"  Epoch {epoch+1}/{self.epochs} | "
@@ -231,6 +264,21 @@ class ImitationTrainer:
             "config": self.config,
         }, path + ".pt")
         print(f"  BC model saved to {path}.pt")
+
+        try:
+            import wandb
+
+            if wandb.run is not None:
+                artifact = wandb.Artifact(
+                    name=f"bc-model-{wandb.run.id}",
+                    type="model",
+                    description="Behavioral cloning warm-start model",
+                )
+                artifact.add_file(path + ".pt")
+                wandb.log_artifact(artifact)
+                wandb.run.summary["bc_model_path"] = path + ".pt"
+        except ImportError:
+            pass
 
     def load(self, path: str, obs_dim: int, act_dim: int):
         """Load BC model."""

@@ -7,7 +7,7 @@ action spaces, reward functions, and domain randomization.
 
 from f1tenth_rl.envs.wrapper import F1TenthWrapper, make_env, make_vec_env
 from f1tenth_rl.envs.observations import ObservationBuilder
-from f1tenth_rl.envs.rewards import RewardFunction, ProgressReward, CTHReward, SpeedReward
+from f1tenth_rl.envs.rewards import RewardFunction, ProgressReward, CTHReward, SpeedReward, CurriculumReward
 from f1tenth_rl.envs.domain_randomization import DomainRandomizationWrapper
 
 __all__ = [
@@ -19,5 +19,6 @@ __all__ = [
     "ProgressReward",
     "CTHReward",
     "SpeedReward",
+    "CurriculumReward",
     "DomainRandomizationWrapper",
 ]
