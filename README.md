@@ -95,6 +95,33 @@ steer_smoothness    : 0.004 +/- 0.000
 
 Compared with the baseline, the curriculum reward keeps the same 0% crash rate while improving average lap time from **20.85 s** to **20.43 s** and improving steering smoothness from roughly **0.010** to **0.004**.
 
+## ROS/Foxglove Observation
+
+When testing the curriculum policy in ROS/Foxglove, the model could make turns at the original `3.0 m/s` speed cap, but the resulting line was too close to the outer wall after corner exit. This is consistent with the eval policy optimizing lap completion and speed with a low clearance margin: the behavior is valid in the training/eval simulator, but sensitive to vehicle footprint, LiDAR preprocessing, and ROS simulation mismatch.
+
+To improve real-car and ROS robustness, we increased the clearance penalty for the next retraining run:
+
+```yaml
+wall_proximity_penalty: 2.0
+wall_proximity_mean_penalty: 1.0
+wall_proximity_threshold: 0.7
+```
+
+The new `wall_proximity_mean_penalty` punishes sustained wall-hugging across many LiDAR beams, not only the single closest ray. The goal is to learn a wider safety buffer while preserving the curriculum reward's speed and progress benefits.
+
+Retraining command:
+
+```bash
+python scripts/train.py \
+  --config configs/sim2real_e2e.yaml \
+  --bc-pretrain demos/levine_blocked_pp_3ms.npz \
+  --algo ppo \
+  --reward-type curriculum \
+  --name bc_ppo_curriculum_clearance_levine_safe \
+  --total-steps 5000000 \
+  --wandb
+```
+
 ## Training Command
 
 The existing behavioral cloning demonstrations can be reused:
