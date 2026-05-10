@@ -10,4 +10,4 @@ Levine Racetrack Baseline Model (Part 2) - https://youtube.com/shorts/BWA4PYn2QH
 
 Levine Racetrack Model 2 - https://youtube.com/shorts/l-scy5L0slc
 
-Houston Racetrack Model 2 -
+Houston Racetrack Model 2 - https://youtu.be/TqWac2NqKgM
