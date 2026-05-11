@@ -1,5 +1,19 @@
 # ESE615 Final Project - Team 7
 
+---
+
+## Team
+
+- **Aiden Lee** - aidenlee@seas.upenn.edu
+- **Ishita Munshi** - ishita03-dev@seas.upenn.edu
+- **Ayan Bhatia** — `@<github-username>`
+- **Aria Shi** — `@<github-username>`
+
+## Demo and Explanation
+Demo videos and the project explanation video are within the videos folder. 
+
+## Introduction 
+
 This repository was originally forked from `f1tenth_rl_humble`.
 
 The project investigates sim-to-real-oriented reinforcement learning for F1TENTH autonomous racing, using behavioral cloning (BC), PPO fine-tuning, and reward shaping on the Levine 2nd floor map (`levine_blocked`).
