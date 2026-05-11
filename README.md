@@ -6,7 +6,7 @@
 
 - **Aiden Lee** - aidenlee@seas.upenn.edu
 - **Ishita Munshi** - ishita03-dev@seas.upenn.edu
-- **Ayan Bhatia** — `ayanbh@seas.upenn.edu`
+- **Ayan Bhatia** — `ayanbh@seas.upenn.edu` (Ayan-Bhatia-ee)
 - **Aria Shi** — `@<github-username>`
 
 ## Demo and Explanation
