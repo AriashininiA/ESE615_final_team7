@@ -7,7 +7,7 @@
 - **Aiden Lee** - aidenlee@seas.upenn.edu
 - **Ishita Munshi** - ishita03-dev@seas.upenn.edu
 - **Ayan Bhatia** — `ayanbh@seas.upenn.edu` (Ayan-Bhatia-ee)
-- **Aria Shi** — `@<github-username>`
+- **Aria X. Shi** — xish@seas.upenn.edu — GitHub: [@AriashininiA](https://github.com/AriashininiA)
 
 ## Demo and Explanation
 Demo videos and the project explanation video are within the videos folder. 
